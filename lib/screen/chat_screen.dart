@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 
 class ChatScreen extends StatefulWidget {
@@ -21,7 +23,48 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
+    _loadLatestChats();
     _connectSocket();
+  }
+
+  Future<void> _loadLatestChats() async {
+    String host = 'localhost';
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      host = '10.0.2.2';
+    }
+
+    // Petición a la API REST (puerto 8080 como en productos)
+    final url = Uri.parse('http://$host:8080/api/v1/chats/latest');
+
+    try {
+      final response = await http.get(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ${widget.token}',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+        if (mounted) {
+          setState(() {
+            // .reversed asume que el backend manda el más reciente en la posición 0.
+            // Si el backend ya los ordena del más antiguo al más nuevo, puedes quitar el .reversed
+            for (var msg in data.reversed) {
+              _messages.add({
+                'sender': msg['senderName'] ?? msg['sender'] ?? 'Desconocido',
+                'text': msg['content'] ?? msg['text'] ?? '',
+              });
+            }
+          });
+        }
+      } else {
+        debugPrint('Error al cargar historial: ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('Error de red al cargar historial: $e');
+    }
   }
 
   void _connectSocket() {
